@@ -1,0 +1,2 @@
+class TestTrader():
+    pass

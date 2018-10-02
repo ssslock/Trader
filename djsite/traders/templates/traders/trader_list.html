@@ -1,0 +1,9 @@
+{% if active_traders %}
+    <ul>
+    {% for trader in active_traders %}
+        <li><a href="{% url 'traders:trader_detail' trader.id %}">{{ trader }}</a></li>
+    {% endfor %}
+    </ul>
+{% else %}
+    <p>No active Trader.</p>
+{% endif %}

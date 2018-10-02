@@ -1,0 +1,9 @@
+{% if enabled_exchanges %}
+    <ul>
+    {% for exchange in enabled_exchanges %}
+        <li><a href="{% url 'traders:exchange_detail' exchange.id %}">{{ exchange.name }}</a></li>
+    {% endfor %}
+    </ul>
+{% else %}
+    <p>No enabled Exchange.</p>
+{% endif %}

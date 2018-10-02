@@ -1,0 +1,26 @@
+<h1>{{ trader }}</h1>
+
+{% if error_message %}<p><strong>{{ error_message }}</strong></p>{% endif %}
+
+{% for balance in trader.balance_set.all %}
+    <p>{{ balance }}</p>
+{% endfor %}
+<br>
+{% for order in orders %}
+    <form action="{% url 'traders:edit_order' order.id %}" method="post">
+    {% csrf_token %}
+    <label for="order{{ forloop.counter }}">{{ order }}  </label>
+    <input type="submit" name="deal" value="Deal">
+    <input type="submit" name="cancel" value="Cancel">
+    </form>
+{% endfor %}
+<br>
+<p>Create order</p>
+<form action="{% url 'traders:create_order' trader.id %}" method="post">
+{% csrf_token %}
+<p>ETH/BTC</p>
+<p>Bid    <input type="checkbox" name="bid" value="0" checked></p>
+<p>Price  <input type="number" name="price" step="0.00000001" value="0"></p>
+<p>volume <input type="number" name="volume" step="0.00000001" value="0"></p>
+<input type="submit" value="Create">
+</form>

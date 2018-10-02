@@ -1,0 +1,16 @@
+<h1>{{ exchange.name }}</h1>
+
+{% if error_message %}<p><strong>{{ error_message }}</strong></p>{% endif %}
+
+<form action="{% url 'traders:update_exchange' exchange.id %}" method="post">
+{% csrf_token %}
+<input type="submit" value="更新交易所信息">
+</form>
+
+{% for market in exchange.market_set.all %}
+    <li><a href="{% url 'traders:market_detail' market.id %}">{{ market.symbol }}</a></li>
+{% endfor %}
+
+{% for currency in exchange.currency_set.all %}
+    <p>{{ currency.name }}</p>
+{% endfor %}
