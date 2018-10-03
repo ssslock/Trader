@@ -35,9 +35,9 @@ class Exchange(models.Model):
             market = self.market_set.get(symbol=symbol)
         except Market.DoesNotExist:
             splitter = symbol.find('/')
-            currency_from = self.get_or_create_currency(symbol[:splitter])
-            currency_to = self.get_or_create_currency(symbol[splitter + 1:])
-            market = Market(exchange=self, currency_from = currency_from, currency_to = currency_to, symbol=symbol, last_update = timezone.now())
+            currency1 = self.get_or_create_currency(symbol[:splitter])
+            currency2 = self.get_or_create_currency(symbol[splitter + 1:])
+            market = Market(exchange=self, currency1 = currency1, currency2 = currency2, symbol=symbol, last_update = timezone.now())
             market.save()
         return market
 
@@ -55,8 +55,8 @@ class Market(models.Model):
     exchange = models.ForeignKey(Exchange, on_delete=models.CASCADE)
     symbol = models.CharField(max_length=16)
     active = models.BooleanField(default=True)
-    currency_from = models.ForeignKey(Currency, on_delete=models.SET_NULL, related_name="cfrom", null=True)
-    currency_to = models.ForeignKey(Currency, on_delete=models.SET_NULL, related_name="cto", null=True)
+    currency1 = models.ForeignKey(Currency, on_delete=models.SET_NULL, related_name="cfrom", null=True)
+    currency2 = models.ForeignKey(Currency, on_delete=models.SET_NULL, related_name="cto", null=True)
 
     last_update = models.DateTimeField()
     high = models.DecimalField(default=0, max_digits=40, decimal_places=20)
@@ -94,23 +94,54 @@ class Balance(models.Model):
     trader = models.ForeignKey(Trader, on_delete=models.CASCADE)
     currency = models.ForeignKey(Currency, on_delete=models.CASCADE)
     value = models.DecimalField(default=0, max_digits=40, decimal_places=20)
+    available = models.DecimalField(default=0, max_digits=40, decimal_places=20)
     
     def __str__(self):
-        return '%s : %f' % (str(self.currency), self.value)
+        return '%s : %.10f' % (str(self.currency), self.value)
+    
+    def detail_str(self):
+        return '%s   balance: %.10f   available: %.10f' % (str(self.currency), self.value, self.available)
 
-# 交易
+# 订单
 class Order(models.Model):
+    STATE_CREATED = 0
+    STATE_CLOSED = 1
     trader = models.ForeignKey(Trader, on_delete=models.CASCADE)
     market = models.ForeignKey(Market, on_delete=models.CASCADE)
-    date = models.DateTimeField()
+    create_date = models.DateTimeField()
+    close_date = models.DateTimeField(null=True)
     bid = models.BooleanField()
     price = models.DecimalField(max_digits=40, decimal_places=20)
     volume = models.DecimalField(max_digits=40, decimal_places=20)
+    available = models.DecimalField(max_digits=40, decimal_places=20)
+    dealt1 = models.DecimalField(default=0,max_digits=40, decimal_places=20)
+    dealt2 = models.DecimalField(default=0,max_digits=40, decimal_places=20)
     state = models.SmallIntegerField(default=0)
-    info = models.CharField(default="", max_length = 2000)
 
     def __str__(self):
         if self.bid:
-            return '%s %s bid   price: %f  volume: %f' % (str(self.date), str(self.market), self.price, self. volume)
+            return '%s %s bid' % (str(self.create_date), str(self.market))
         else:
-            return '%s %s ask   price: %f  volume: %f' % (str(self.date), str(self.market), self.price, self. volume)
+            return '%s %s ask' % (str(self.create_date), str(self.market))
+
+    def detail_str(self):
+        if self.bid:
+            return '%s %s bid   price: %.10f  volume: %.10f' % (str(self.create_date), str(self.market), self.price, self.volume)
+        else:
+            return '%s %s ask   price: %.10f  volume:, %.10f' % (str(self.create_date), str(self.market), self.price, self.volume)
+# 交易
+class Deal(models.Model):
+    order = models.ForeignKey(Order, on_delete=models.CASCADE)
+    date = models.DateTimeField()
+    price = models.DecimalField(max_digits=40, decimal_places=20)
+    dealt1 = models.DecimalField(max_digits=40, decimal_places=20)
+    dealt2 = models.DecimalField(max_digits=40, decimal_places=20)
+    
+    def __str__(self):
+        '%s %.10f' % (str(self.create_date), self.volume)
+
+    def detail_str(self):
+        if self.order.bid:
+            return '%s %.10f %.10f %s for %.10f %s' % (str(self.date), self.dealt1, self.dealt1, self.order.market.currency1.name, self.dealt2, self.order.market.currency2.name)
+        else:
+            return '%s %.10f %.10f %s for %.10f %s' % (str(self.date), self.dealt1, self.dealt2, self.order.market.currency2.name, self.dealt1, self.order.market.currency1.name)

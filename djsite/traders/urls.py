@@ -14,4 +14,5 @@ urlpatterns = [
     path('trader/<int:pk>/', views.TraderDetailView.as_view(), name='trader_detail'),
     path('trader/<int:trader_id>/create_order/', views.create_order, name='create_order'),
     path('order/<int:order_id>/edit_order/', views.edit_order, name='edit_order'),
+    path('order/<int:pk>/', views.OrderDetailView.as_view(), name='order_detail'),
 ]

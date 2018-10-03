@@ -1,0 +1,14 @@
+<p>trader      : <label>{{ order.trader }}</label></p>
+<p>market      : <label>{{ order.market }}</label></p>
+<p>create date : <label>{{ order.create_date }}</label></p>
+<p>close date  : <label>{{ order.close_date }}</label></p>
+<p>bid         : <label>{{ order.bid }}</label></p>
+<p>price       : <label>{{ order.price }}</label></p>
+<p>volume      : <label>{{ order.volume }}</label></p>
+<p>available   : <label>{{ order.available }}</label></p>
+<p>dealt1      : <label>{{ order.dealt1 }}</label></p>
+<p>dealt2      : <label>{{ order.dealt2 }}</label></p>
+<p>state       : <label>{{ order.state }}</label></p>
+{% for deal in order.deal_set.all %}
+    <p><label>{{ deal.detail_str }}</label></p>
+{% endfor %}

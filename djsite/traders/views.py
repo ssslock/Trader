@@ -5,7 +5,7 @@ from django.urls import reverse
 from django.utils import timezone
 from decimal import Decimal
 
-from .models import Trader, Exchange, Market, Order, Balance
+from .models import Trader, Exchange, Market, Order, Balance, Deal
 from .api import get_api
 
 class ExchangeListView(generic.ListView):
@@ -39,11 +39,11 @@ class MarketDetailView(generic.DetailView):
         market = context['market']
         market.update_info()
         context['datetime'] = market.last_update
-        context['high'] = market.high
-        context['low'] = market.low
-        context['bid'] = market.bid
-        context['ask'] = market.ask
-        context['volume'] = market.volume
+        context['high'] = "%.10f" % market.high
+        context['low'] = "%.10f" % market.low
+        context['bid'] = "%.10f" % market.bid
+        context['ask'] = "%.10f" % market.ask
+        context['volume'] = "%.10f" % market.volume
         return context
 
 class TraderListView(generic.ListView):
@@ -62,15 +62,16 @@ class TraderDetailView(generic.DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         trader = context['trader']
-        context['orders'] = trader.order_set.filter(state = 0)
+        context['orders'] = trader.order_set.filter(state = Order.STATE_CREATED)
+        context['closed_orders'] = trader.order_set.filter(state = Order.STATE_CLOSED)
         return context
 
 def create_order(request, trader_id):
     trader = get_object_or_404(Trader, pk=trader_id)
     market = get_object_or_404(Market, symbol='ETH/BTC')
     try:
-        balance_from = trader.balance_set.get(currency = market.currency_from)
-        balance_to = trader.balance_set.get(currency = market.currency_to)
+        balance1 = trader.balance_set.get(currency = market.currency1)
+        balance2 = trader.balance_set.get(currency = market.currency2)
     except:
         return render(request, 'traders/trader_detail.html', {
             'trader': trader,
@@ -90,24 +91,24 @@ def create_order(request, trader_id):
             'error_message': "volume should be positive",
         })
     if bid:
-        if balance_from.value < volume:
+        if balance1.available < volume:
             return render(request, 'traders/trader_detail.html', {
                 'trader': trader,
-                'error_message': "balance for %s not enough! has %f    needs %f" % (str(balance_from.currency), balance_from.value, volume),
+                'error_message': "balance for %s not enough! has %f    needs %f" % (str(balance1.currency), balance1.available, volume),
             })
         else:
-            balance_from.value -= volume
-            balance_from.save()
+            balance1.available -= volume
+            balance1.save()
     else:
-        if balance_to.value < volume * price:
+        if balance2.available < volume * price:
             return render(request, 'traders/trader_detail.html', {
                 'trader': trader,
-                'error_message': "balance for %s not enough! has %f    needs %f" % (str(balance_to.currency), balance_to.value, volume * price),
+                'error_message': "balance for %s not enough! has %f    needs %f" % (str(balance2.currency), balance2.available, volume * price),
             })
         else:
-            balance_to.value -= volume * price
-            balance_to.save()
-    order = Order(trader = trader, market = market, date = timezone.now(), bid = bid, price = price, volume = volume)
+            balance2.available -= volume * price
+            balance2.save()
+    order = Order(trader = trader, market = market, create_date = timezone.now(), bid = bid, price = price, volume = volume, available = volume)
     order.save()
     return HttpResponseRedirect(reverse('traders:trader_detail', args=(trader_id,)))
 
@@ -115,69 +116,53 @@ def edit_order(request, order_id):
     order = get_object_or_404(Order, pk=order_id)
     trader = order.trader
     market = order.market
-    balance_from = trader.balance_set.get(currency = market.currency_from)
-    balance_to = trader.balance_set.get(currency = market.currency_to)
+    balance1 = trader.balance_set.get(currency = market.currency1)
+    balance2 = trader.balance_set.get(currency = market.currency2)
     if request.POST.get('deal'):
+        volume = Decimal(request.POST.get('volume'))
+        price = Decimal(request.POST.get('price'))
+        volume2 = price * volume
+        deal = Deal(order=order, date=timezone.now(), price=price, dealt1=volume, dealt2=volume2)
+        deal.save()
         if order.bid:
-            balance_to.value += order.price * order.volume
-            balance_to.save()
+            balance1.value -= volume
+            balance2.value += volume2
+            balance2.available += volume2
+            balance1.save()
+            balance2.save()
         else:
-            balance_from.value += order.volume
-            balance_from.save()
-        order.state = 1
+            balance1.value += volume
+            balance1.available += volume
+            balance2.value -= volume2
+            balance1.save()
+            balance2.save()
+        order.available -= volume
+        order.dealt1 += volume
+        order.dealt2 += volume2
+        if order.available <= 0:
+            order.state = Order.STATE_CLOSED
+            order.close_date = deal.date
         order.save()
     else:
         if order.bid:
-            balance_from.value += order.volume
-            balance_from.save()
+            balance1.available += order.available
+            balance1.save()
         else:
-            balance_to.value += order.price * order.volume
-            balance_to.save()
-        order.state = -1
+            balance2.available += order.price * order.volume
+            balance2.save()
+        order.state = Order.STATE_CLOSED
+        order.close_date = timezone.now()
         order.save()
     return HttpResponseRedirect(reverse('traders:trader_detail', args=(trader.id,)))
-    # trader = get_object_or_404(Trader, pk=trader_id)
-    # market = get_object_or_404(Market, symbol='ETH/BTC')
-    # try:
-    #     balance_from = trader.balance_set.get(currency = market.currency_from)
-    #     balance_to = trader.balance_set.get(currency = market.currency_to)
-    # except:
-    #     return render(request, 'traders/trader_detail.html', {
-    #         'trader': trader,
-    #         'error_message': "No balance for this market.",
-    #     })
-    # bid = request.POST.get('bid') != None
-    # price = Decimal(request.POST['price'])
-    # volume = Decimal(request.POST['volume'])
-    # if price <= 0:
-    #     return render(request, 'traders/trader_detail.html', {
-    #         'trader': trader,
-    #         'error_message': "price should be positive",
-    #     })
-    # if volume <= 0:
-    #     return render(request, 'traders/trader_detail.html', {
-    #         'trader': trader,
-    #         'error_message': "volume should be positive",
-    #     })
-    # if bid:
-    #     if balance_from.value < volume:
-    #         return render(request, 'traders/trader_detail.html', {
-    #             'trader': trader,
-    #             'error_message': "balance for %s not enough! has %f    needs %f" % (str(balance_from.currency), balance_from.value, volume),
-    #         })
-    #     else:
-    #         balance_from.value -= volume
-    #         balance_from.save()
-    # else:
-    #     if balance_to.value < volume * price:
-    #         return render(request, 'traders/trader_detail.html', {
-    #             'trader': trader,
-    #             'error_message': "balance for %s not enough! has %f    needs %f" % (str(balance_to.currency), balance_to.value, volume * price),
-    #         })
-    #     else:
-    #         balance_to.value -= volume * price
-    #         balance_to.save()
-    # order = Order(trader = trader, market = market, date = timezone.now(), bid = bid, price = price, volume = volume)
-    # order.save()
-    # return HttpResponseRedirect(reverse('traders:trader_detail', args=(trader_id,)))
 
+
+class OrderDetailView(generic.DetailView):
+    model = Order
+    template_name = 'traders/order_detail.html'
+
+    # def get_context_data(self, **kwargs):
+    #     context = super().get_context_data(**kwargs)
+    #     order = context['trader']
+    #     context['orders'] = trader.order_set.filter(state = Order.STATE_CREATED)
+    #     context['closed_orders'] = trader.order_set.filter(state = Order.STATE_CLOSED)
+    #     return context
